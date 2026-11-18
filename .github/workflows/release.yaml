@@ -75,6 +75,7 @@ jobs:
           docker build \
             --label "org.opencontainers.image.version=$version" \
             --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
+            --label "org.opencontainers.image.created=$(git log -1 --format=%cI)" \
             -t "$IMAGE:$version" .
 
       - name: Smoke test
