@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "timezone": "Europe/Rome",
+  "labels": ["dependencies"],
+  "git-submodules": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Hugo, nginx and the theme end up in the image: ship as a patch release",
+      "matchFileNames": ["Dockerfile", ".gitmodules"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
+    },
+    {
+      "description": "CI tooling: one grouped PR, no release",
+      "matchFileNames": [".github/workflows/**"],
+      "semanticCommitType": "ci",
+      "semanticCommitScope": "deps",
+      "groupName": "CI"
+    }
+  ]
+}

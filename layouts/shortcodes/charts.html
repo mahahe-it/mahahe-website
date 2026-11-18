@@ -1,0 +1,66 @@
+{{- /*
+  Chart catalog, read in the browser from the Artifact Hub API (it allows
+  cross-origin requests), so a new chart or release shows up without
+  rebuilding the site.
+*/ -}}
+<div id="chart-catalog">
+  <p>Loading the charts from <a href="https://artifacthub.io/packages/search?org=mahahe-it">Artifact Hub</a>…</p>
+</div>
+<noscript>
+  <p>See the charts on <a href="https://artifacthub.io/packages/search?org=mahahe-it">Artifact Hub</a>.</p>
+</noscript>
+<script>
+(function () {
+  var box = document.getElementById("chart-catalog");
+  var api = "https://artifacthub.io/api/v1/packages/search?org=mahahe-it&kind=0&limit=60&sort=relevance";
+  function el(tag, text) {
+    var e = document.createElement(tag);
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  fetch(api, { headers: { Accept: "application/json" } })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (data) {
+      var pkgs = (data.packages || []).sort(function (a, b) { return a.name.localeCompare(b.name); });
+      if (!pkgs.length) throw new Error("no packages");
+      var table = el("table");
+      var head = el("tr");
+      ["Chart", "Version", "Description", "Install"].forEach(function (h) {
+        var th = head.appendChild(el("th", h));
+        th.style.whiteSpace = "nowrap";
+      });
+      table.appendChild(el("thead")).appendChild(head);
+      var body = table.appendChild(el("tbody"));
+      pkgs.forEach(function (p) {
+        var row = el("tr");
+        var name = el("td");
+        var link = el("a", p.name);
+        link.href = "https://artifacthub.io/packages/helm/" + encodeURIComponent(p.repository.name) + "/" + encodeURIComponent(p.name);
+        name.appendChild(link);
+        row.appendChild(name);
+        var version = el("td", p.version);
+        version.style.whiteSpace = "nowrap";
+        row.appendChild(version);
+        row.appendChild(el("td", p.description || ""));
+        var install = el("td");
+        install.appendChild(el("code", "oci://ghcr.io/mahahe-it/helm/" + p.name));
+        row.appendChild(install);
+        body.appendChild(row);
+      });
+      // Narrow screens: scroll the table, not the whole page
+      var wrap = el("div");
+      wrap.style.overflowX = "auto";
+      wrap.appendChild(table);
+      box.replaceChildren(wrap);
+    })
+    .catch(function () {
+      box.replaceChildren();
+      var p = el("p", "The chart list could not be loaded: see ");
+      var a = el("a", "Artifact Hub");
+      a.href = "https://artifacthub.io/packages/search?org=mahahe-it";
+      p.appendChild(a);
+      p.appendChild(document.createTextNode("."));
+      box.appendChild(p);
+    });
+})();
+</script>

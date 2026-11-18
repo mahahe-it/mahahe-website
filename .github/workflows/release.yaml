@@ -1,0 +1,93 @@
+name: Release
+on:
+  push:
+    branches: [main]
+  # Run by hand to rebuild and push the image of an existing release tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish (e.g. v1.0.0)
+        required: true
+      latest:
+        description: Also move the latest tag (only for the newest release)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    # Opens/updates the release PR; on its merge, tags and creates the
+    # GitHub release. The app token makes the release PR trigger CI.
+    name: Release PR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: actions/create-github-app-token@v3.3.0
+        id: app-token
+        with:
+          client-id: ${{ vars.MAHAHE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.MAHAHE_BOT_PRIVATE_KEY }}
+
+      - uses: googleapis/release-please-action@v5.0.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Publish image
+    needs: release-please
+    if: >-
+      always() && (
+        (github.event_name == 'push' && needs.release-please.outputs.release_created == 'true') ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # push to GHCR
+    env:
+      TAG: ${{ github.event_name == 'push' && needs.release-please.outputs.tag_name || inputs.tag }}
+      IMAGE: ghcr.io/${{ github.repository }}
+      LATEST: ${{ github.event_name == 'push' || inputs.latest }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          submodules: true
+
+      - name: Build
+        id: build
+        run: |
+          [[ $TAG =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::Not a release tag: $TAG"; exit 1; }
+          version=${BASH_REMATCH[1]}
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          docker build \
+            --label "org.opencontainers.image.version=$version" \
+            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
+            -t "$IMAGE:$version" .
+
+      - name: Smoke test
+        run: ENGINE=docker scripts/smoke-test.sh "$IMAGE:${{ steps.build.outputs.version }}"
+
+      - name: Push to GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$IMAGE:$VERSION"
+          if [[ $LATEST == true ]]; then
+            docker tag "$IMAGE:$VERSION" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi

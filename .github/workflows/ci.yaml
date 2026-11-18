@@ -1,0 +1,40 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+# pull_request (not pull_request_target): PR code never runs with write
+# tokens, and secrets are only available to branches of this repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    # Squash merges use the PR title as the commit release-please reads
+    name: PR Title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6.1.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    # Same build as the release, without pushing, plus the contract checks
+    name: Build Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: true
+
+      - name: Build
+        run: docker build -t mahahe-website:ci .
+
+      - name: Smoke test
+        run: ENGINE=docker scripts/smoke-test.sh mahahe-website:ci
