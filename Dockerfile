@@ -4,7 +4,7 @@ WORKDIR /project
 RUN hugo --minify --destination /tmp/public
 
 # Runs as non-root (uid 101) and listens on 8080
-FROM docker.io/nginxinc/nginx-unprivileged:1.30.6-alpine
+FROM docker.io/nginxinc/nginx-unprivileged:1.31.7-alpine
 # Override the labels inherited from the nginx image
 LABEL org.opencontainers.image.title="mahahe-website" \
       org.opencontainers.image.url="https://www.mahahe.it" \
